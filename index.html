@@ -3,33 +3,226 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Gesture Music Studio</title>
+    <title>Gesture Music Studio — Make Music With Your Hands</title>
+    <meta name="description" content="A browser-based music studio powered by hand gestures and AI. Play synths, drums, and effects — no instruments needed, just your webcam." />
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎵</text></svg>" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <script type="module" crossorigin src="/air_music/assets/index-BZz-000k.js"></script>
-    <link rel="stylesheet" crossorigin href="/air_music/assets/index-ztR8WEl-.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <script type="module" crossorigin src="/air_music/assets/index-Dxlvf3gw.js"></script>
+    <link rel="stylesheet" crossorigin href="/air_music/assets/index-C-Or2-CM.css">
   </head>
-  <body>
+  <body data-theme="dark">
     <div id="app">
-      <!-- Header -->
-      <header>
-        <div class="logo">
-          <span class="logo-icon">🎵</span>
-          <h1>Gesture Music Studio</h1>
-        </div>
-        <div class="header-controls">
-          <div class="control-chip">
-            <select id="instrument-select">
-              <option value="theremin">🎹 Air Theremin</option>
-              <option value="drumkit">🥁 Air Drums</option>
-              <option value="kaoss">🎛️ Kaoss Pad</option>
-              <option value="fxpad">🎚️ FX Pad</option>
-            </select>
+
+      <!-- ───────────────────────────────────────────────────── -->
+      <!--  LEFT SIDEBAR                                         -->
+      <!-- ───────────────────────────────────────────────────── -->
+      <aside class="sidebar" id="sidebar">
+        <!-- Brand -->
+        <div class="sidebar-brand">
+          <div class="brand-logo">
+            <span class="brand-icon">🎵</span>
           </div>
-          <div class="control-chip">
-            <select id="scale-select">
+          <div class="brand-text">
+            <span class="brand-name">Gesture Studio</span>
+            <span class="brand-tagline">Make music with your hands</span>
+          </div>
+        </div>
+
+        <!-- Personal greeting -->
+        <div class="sidebar-greeting" id="sidebar-greeting">
+          <span class="greeting-wave">👋</span>
+          <div>
+            <p class="greeting-text" id="greeting-text">Good evening, Jayesh</p>
+            <p class="greeting-sub">Ready to make something?</p>
+          </div>
+        </div>
+
+        <!-- Instrument Nav -->
+        <div class="sidebar-section">
+          <span class="sidebar-section-label">Instruments</span>
+          <nav class="instrument-nav" id="instrument-nav">
+            <button class="instrument-btn active" data-instrument="theremin" id="nav-theremin">
+              <span class="instrument-btn-icon">🎹</span>
+              <div class="instrument-btn-text">
+                <span class="instrument-btn-name">Air Theremin</span>
+                <span class="instrument-btn-desc">Pitch &amp; filter with hand position</span>
+              </div>
+              <span class="instrument-active-dot"></span>
+            </button>
+            <button class="instrument-btn" data-instrument="drumkit" id="nav-drumkit">
+              <span class="instrument-btn-icon">🥁</span>
+              <div class="instrument-btn-text">
+                <span class="instrument-btn-name">Air Drums</span>
+                <span class="instrument-btn-desc">Curl fingers to hit each drum</span>
+              </div>
+              <span class="instrument-active-dot"></span>
+            </button>
+            <button class="instrument-btn" data-instrument="kaoss" id="nav-kaoss">
+              <span class="instrument-btn-icon">🎛️</span>
+              <div class="instrument-btn-text">
+                <span class="instrument-btn-name">Kaoss Pad</span>
+                <span class="instrument-btn-desc">FM synthesis X/Y control</span>
+              </div>
+              <span class="instrument-active-dot"></span>
+            </button>
+            <button class="instrument-btn" data-instrument="fxpad" id="nav-fxpad">
+              <span class="instrument-btn-icon">🎚️</span>
+              <div class="instrument-btn-text">
+                <span class="instrument-btn-name">FX Pad</span>
+                <span class="instrument-btn-desc">Shape effects on a drone</span>
+              </div>
+              <span class="instrument-active-dot"></span>
+            </button>
+          </nav>
+        </div>
+
+        <!-- Layer Stack -->
+        <div class="sidebar-section">
+          <div class="sidebar-section-header">
+            <span class="sidebar-section-label">Layers</span>
+            <button class="btn-add-layer" id="add-layer-btn" title="Add a new instrument layer">
+              + Add Layer
+            </button>
+          </div>
+          <div class="layer-stack" id="layer-stack">
+            <div class="layer-empty" id="layer-empty-msg">
+              <span>No layers — main instrument is playing</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Theme switcher -->
+        <div class="sidebar-section theme-section">
+          <span class="sidebar-section-label">Theme</span>
+          <div class="theme-switcher">
+            <button class="theme-btn active" data-theme="dark" id="theme-dark" title="Dark mode">
+              <span class="theme-swatch theme-swatch-dark"></span>
+              <span>Dark</span>
+            </button>
+            <button class="theme-btn" data-theme="neon" id="theme-neon" title="Neon mode">
+              <span class="theme-swatch theme-swatch-neon"></span>
+              <span>Neon</span>
+            </button>
+            <button class="theme-btn" data-theme="warm" id="theme-warm" title="Warm mode">
+              <span class="theme-swatch theme-swatch-warm"></span>
+              <span>Warm</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Hidden original selects (wired by main.js) -->
+        <select id="instrument-select" style="display:none;">
+          <option value="theremin">Air Theremin</option>
+          <option value="drumkit">Air Drums</option>
+          <option value="kaoss">Kaoss Pad</option>
+          <option value="fxpad">FX Pad</option>
+        </select>
+
+        <!-- Links -->
+        <div class="sidebar-footer">
+          <button class="sidebar-link-btn" id="tutorial-btn" title="Start guided tutorial [T]">
+            <span>📖</span> Tutorial
+          </button>
+          <button class="sidebar-link-btn" id="song-guide-btn" title="Song learning guide [G]">
+            <span>🎵</span> Songs
+          </button>
+        </div>
+      </aside>
+
+      <!-- ───────────────────────────────────────────────────── -->
+      <!--  MAIN STAGE (center)                                  -->
+      <!-- ───────────────────────────────────────────────────── -->
+      <main class="stage">
+
+        <!-- Top bar -->
+        <header class="stage-header">
+          <div class="stage-title" id="stage-title-area">
+            <h1 class="stage-instrument-name" id="stage-instrument-name">Air Theremin</h1>
+            <span class="stage-instrument-desc" id="stage-instrument-desc">Move your hand up/down for pitch, left/right for filter</span>
+          </div>
+          <div class="stage-header-actions">
+            <!-- Health indicator -->
+            <div id="health-indicator" class="health-indicator" title="Performance">
+              <span class="health-dot"></span>
+              <span id="health-fps" class="health-fps">-- FPS</span>
+              <span id="health-frame" class="health-frame">#0</span>
+            </div>
+            <!-- Export / share -->
+            <button id="export-btn" class="action-pill" title="Record &amp; export WAV">📼 Record</button>
+            <button id="export-midi-btn" class="action-pill action-pill-green" title="Export MIDI">🎵 MIDI</button>
+            <button id="share-link-btn" class="action-pill" title="Copy share link">🔗 Share</button>
+          </div>
+        </header>
+
+        <!-- Status bar -->
+        <div id="status" class="status">Initializing...</div>
+
+        <!-- Camera + overlay -->
+        <div class="camera-section">
+          <div class="video-container">
+            <video id="webcam" autoplay playsinline muted></video>
+            <canvas id="hand-overlay"></canvas>
+          </div>
+
+          <!-- Info panel beside camera -->
+          <div id="info-panel" class="info-panel">
+            <div class="info-placeholder">Show your hand to the camera</div>
+          </div>
+        </div>
+
+        <!-- Visualizer -->
+        <div class="visualizer-section">
+          <canvas id="visualizer"></canvas>
+          <div class="visualizer-controls">
+            <div class="viz-mode-select">
+              <button class="viz-mode-btn viz-mode-active" data-mode="spectrum" id="viz-btn-spectrum">📊 3D</button>
+              <button class="viz-mode-btn" data-mode="particles" id="viz-btn-particles">✨ Particles</button>
+              <button class="viz-mode-btn" data-mode="circular" id="viz-btn-circular">⭕ Circular</button>
+              <button class="viz-mode-btn" data-mode="heatmap" id="viz-btn-heatmap">🌡️ Heatmap</button>
+            </div>
+            <span class="hint" id="viz-mode-label">3D Spectrum • Move your hand to shape the sound</span>
+          </div>
+        </div>
+
+        <!-- Loop station -->
+        <div id="loop-station" class="loop-station">
+          <div class="loop-station-header">
+            <span class="loop-station-title">Loop Station</span>
+            <div class="loop-station-controls">
+              <span id="loop-layer-count" class="loop-layer-count">0 layers</span>
+              <span id="loop-rec-indicator" class="loop-rec-indicator" style="display:none;">
+                <span class="rec-pulse">●</span> REC
+              </span>
+            </div>
+          </div>
+          <div id="loop-layers" class="loop-layers"></div>
+          <div class="loop-gesture-hint">
+            <span>🔄 Circle = Record</span>
+            <span>✋ Open Palm = Stop</span>
+            <span>👍 Play All</span>
+            <span>👎 Stop All</span>
+            <span>⬆️ Add Layer</span>
+            <span>⬇️ Remove</span>
+          </div>
+        </div>
+
+      </main>
+
+      <!-- ───────────────────────────────────────────────────── -->
+      <!--  RIGHT PANEL (context controls)                       -->
+      <!-- ───────────────────────────────────────────────────── -->
+      <aside class="controls-panel" id="controls-panel">
+
+        <!-- Tone controls -->
+        <div class="controls-section" id="section-tone">
+          <span class="controls-section-label">Sound</span>
+
+          <!-- Scale -->
+          <div class="control-row" id="scale-row">
+            <label class="control-label" for="scale-select">Scale</label>
+            <select id="scale-select" class="control-select">
               <option value="pentatonic">🎼 Pentatonic</option>
               <option value="major">🎼 Major</option>
               <option value="minor">🎼 Minor</option>
@@ -37,92 +230,221 @@
               <option value="chromatic">🎼 Chromatic</option>
             </select>
           </div>
-          <div class="bpm-group control-chip">
-            <label class="bpm-label" for="bpm-slider">
-              <span id="bpm-display">120</span>
-              <span class="bpm-unit">BPM</span>
-            </label>
-            <input type="range" id="bpm-slider" min="40" max="200" value="120" step="1" class="bpm-slider" />
+
+          <!-- Chord mode -->
+          <div class="control-row toggle-row" id="chord-row">
+            <label class="control-label" for="chord-mode-btn">Chord Mode</label>
+            <button id="chord-mode-btn" class="toggle-btn" title="Play full chords instead of single notes">Off</button>
           </div>
-          <button id="metronome-btn" class="btn btn-small" title="Toggle Metronome [M]">🎵</button>
-          <button id="arp-toggle" class="btn btn-small" title="Toggle Arpeggiator [A]">🎹 Arp</button>
-          <div class="control-chip">
-            <select id="arp-pattern">
-              <option value="up">↑ Up</option>
-              <option value="down">↓ Down</option>
-              <option value="upDown">↕ Up/Dn</option>
-              <option value="random">🎲 Random</option>
-            </select>
+
+          <!-- Drone -->
+          <div class="control-row toggle-row" id="drone-row">
+            <label class="control-label" for="drone-btn">Ambient Drone</label>
+            <button id="drone-btn" class="toggle-btn" title="Background ambient drone pad">Off</button>
           </div>
-          <div class="control-chip">
-            <select id="quantize-select">
-              <option value="off">Q: Off</option>
-              <option value="1m">Q: 1 bar</option>
-              <option value="2n">Q: 1/2</option>
-              <option value="4n">Q: 1/4</option>
-              <option value="8n">Q: 1/8</option>
-              <option value="16n">Q: 1/16</option>
-            </select>
-          </div>
-          <div id="fx-axis-controls" style="display:none;">
-            <div class="control-chip">
-              <select id="fx-x-param">
-                <option value="reverbMix">X: Reverb Mix</option>
-                <option value="delayTime">X: Delay Time</option>
-                <option value="delayFeedback">X: Delay Fdbk</option>
-                <option value="filterFreq">X: Filter Freq</option>
-                <option value="filterRes">X: Filter Res</option>
-                <option value="distortion">X: Distortion</option>
-                <option value="chorusDepth">X: Chorus Depth</option>
-              </select>
-            </div>
-            <div class="control-chip">
-              <select id="fx-y-param">
-                <option value="delayTime">Y: Delay Time</option>
-                <option value="reverbMix">Y: Reverb Mix</option>
-                <option value="delayFeedback">Y: Delay Fdbk</option>
-                <option value="filterFreq">Y: Filter Freq</option>
-                <option value="filterRes">Y: Filter Res</option>
-                <option value="distortion">Y: Distortion</option>
-                <option value="chorusDepth">Y: Chorus Depth</option>
-              </select>
-            </div>
-          </div>
-          <div id="preset-controls">
-            <button id="preset-save-btn" class="btn btn-small btn-preset" title="Save Preset">💾</button>
-            <select id="preset-load-select">
-              <option value="">Load Preset...</option>
-            </select>
-            <button id="preset-delete-btn" class="btn btn-small btn-preset" title="Delete Preset" style="display:none;">🗑️</button>
-            <button id="export-btn" class="btn btn-small" title="Record and Export Audio (WAV)">📼</button>
-            <button id="export-midi-btn" class="btn btn-small btn-midi" title="Export MIDI file of your performance">🎵 MIDI</button>
-            <button id="share-link-btn" class="btn btn-small btn-share" title="Copy share URL with current settings">🔗</button>
-            <button id="ai-melody-toggle" class="btn btn-small btn-ai" title="Toggle AI Melody Generation">🤖 AI</button>
-            <span id="ai-melody-status" class="ai-status"></span>
-          </div>
-          <div class="control-chip" id="drum-chip" style="display:none;">
-            <select id="drum-mapping-select">
+
+          <!-- Drum mapping (drums only) -->
+          <div class="control-row" id="drum-mapping-row" style="display:none;">
+            <label class="control-label" for="drum-mapping-select">Kit Style</label>
+            <select id="drum-mapping-select" class="control-select">
               <option value="default">🥁 Standard</option>
               <option value="reversed">🔄 Reversed</option>
               <option value="electronic">⚡ Electronic</option>
               <option value="lofi">🎧 Lo-Fi</option>
             </select>
           </div>
-          <button id="song-guide-btn" class="btn btn-small btn-song-guide" title="Learn to play popular songs">🎵 Songs</button>
-          <button id="tutorial-btn" class="btn btn-small btn-tutorial" title="Start interactive gesture tutorial">📖 Learn</button>
-        </div>
-      </header>
 
-      <!-- Startup overlay (shown until audio activates) -->
+          <!-- FX Pad axes (fxpad only) -->
+          <div id="fx-axis-controls" style="display:none;">
+            <div class="control-row">
+              <label class="control-label" for="fx-x-param">X Axis</label>
+              <select id="fx-x-param" class="control-select">
+                <option value="reverbMix">Reverb Mix</option>
+                <option value="delayTime">Delay Time</option>
+                <option value="delayFeedback">Delay Fdbk</option>
+                <option value="filterFreq">Filter Freq</option>
+                <option value="filterRes">Filter Res</option>
+                <option value="distortion">Distortion</option>
+                <option value="chorusDepth">Chorus Depth</option>
+              </select>
+            </div>
+            <div class="control-row">
+              <label class="control-label" for="fx-y-param">Y Axis</label>
+              <select id="fx-y-param" class="control-select">
+                <option value="delayTime">Delay Time</option>
+                <option value="reverbMix">Reverb Mix</option>
+                <option value="delayFeedback">Delay Fdbk</option>
+                <option value="filterFreq">Filter Freq</option>
+                <option value="filterRes">Filter Res</option>
+                <option value="distortion">Distortion</option>
+                <option value="chorusDepth">Chorus Depth</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Timing controls -->
+        <div class="controls-section">
+          <span class="controls-section-label">Timing</span>
+
+          <!-- BPM -->
+          <div class="control-row bpm-row">
+            <label class="control-label">BPM</label>
+            <div class="bpm-control">
+              <span id="bpm-display" class="bpm-display">120</span>
+              <input type="range" id="bpm-slider" min="40" max="200" value="120" step="1" class="bpm-slider" />
+            </div>
+          </div>
+
+          <!-- Metronome -->
+          <div class="control-row toggle-row">
+            <label class="control-label">Metronome</label>
+            <button id="metronome-btn" class="toggle-btn">Off</button>
+          </div>
+
+          <!-- Quantize -->
+          <div class="control-row">
+            <label class="control-label" for="quantize-select">Quantize</label>
+            <select id="quantize-select" class="control-select">
+              <option value="off">Off</option>
+              <option value="1m">1 Bar</option>
+              <option value="2n">½ Note</option>
+              <option value="4n">¼ Note</option>
+              <option value="8n">⅛ Note</option>
+              <option value="16n">1/16</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Arpeggiator -->
+        <div class="controls-section" id="arp-section">
+          <span class="controls-section-label">Arpeggiator</span>
+          <div class="control-row toggle-row">
+            <label class="control-label">Enable</label>
+            <button id="arp-toggle" class="toggle-btn">Off</button>
+          </div>
+          <div class="control-row">
+            <label class="control-label" for="arp-pattern">Pattern</label>
+            <select id="arp-pattern" class="control-select">
+              <option value="up">↑ Up</option>
+              <option value="down">↓ Down</option>
+              <option value="upDown">↕ Up/Down</option>
+              <option value="random">🎲 Random</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- AI & Export -->
+        <div class="controls-section" id="ai-section">
+          <span class="controls-section-label">AI &amp; Export</span>
+          <div class="control-row toggle-row" id="ai-row">
+            <label class="control-label">AI Melody</label>
+            <button id="ai-melody-toggle" class="toggle-btn">Off</button>
+          </div>
+          <span id="ai-melody-status" class="ai-status"></span>
+          <div class="control-row">
+            <label class="control-label">Presets</label>
+            <div class="preset-row">
+              <button id="preset-save-btn" class="btn-icon" title="Save preset">💾</button>
+              <select id="preset-load-select" class="control-select preset-select">
+                <option value="">Load preset...</option>
+              </select>
+              <button id="preset-delete-btn" class="btn-icon" title="Delete preset" style="display:none;">🗑️</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Keyboard shortcuts hint -->
+        <div class="keyboard-hint">
+          <div class="keyboard-hint-title">Keyboard Shortcuts</div>
+          <div class="keyboard-hint-grid">
+            <span><kbd>1</kbd>–<kbd>4</kbd> Instruments</span>
+            <span><kbd>M</kbd> Metro</span>
+            <span><kbd>A</kbd> Arp</span>
+            <span><kbd>V</kbd> Viz</span>
+            <span><kbd>S</kbd> Scale</span>
+            <span><kbd>Q</kbd> Quantize</span>
+            <span><kbd>T</kbd> Tutorial</span>
+            <span><kbd>G</kbd> Songs</span>
+            <span><kbd>+</kbd>/<kbd>−</kbd> BPM</span>
+            <span><kbd>R</kbd> Drum Kit</span>
+          </div>
+        </div>
+
+        <!-- Gesture guide -->
+        <div class="gesture-reference" id="gesture-guide-theremin">
+          <div class="gesture-guide-title">Theremin Guide</div>
+          <div class="gesture-grid">
+            <div class="gesture-item"><span class="gesture-icon">✋</span><span>Hand high = high pitch</span></div>
+            <div class="gesture-item"><span class="gesture-icon">👇</span><span>Hand low = low pitch</span></div>
+            <div class="gesture-item"><span class="gesture-icon">👈👉</span><span>Left/right = filter sweep</span></div>
+            <div class="gesture-item"><span class="gesture-icon">🖐️</span><span>Open hand = more reverb</span></div>
+            <div class="gesture-item"><span class="gesture-icon">✊</span><span>Fist = dry, tight sound</span></div>
+            <div class="gesture-item"><span class="gesture-icon">✌️</span><span>Peace = chord voicing</span></div>
+          </div>
+        </div>
+
+        <div class="gesture-reference" id="gesture-guide-drum" style="display:none;">
+          <div class="gesture-guide-title">Drum Kit Guide</div>
+          <div class="drum-grid">
+            <div class="drum-item" data-finger="thumb">
+              <span class="drum-icon drum-kick">🥾</span>
+              <div class="drum-info"><span class="drum-name">Kick Drum</span><span class="drum-finger">👍 Thumb</span></div>
+              <span class="drum-sound-indicator">🎵</span>
+            </div>
+            <div class="drum-item" data-finger="index">
+              <span class="drum-icon drum-snare">🥁</span>
+              <div class="drum-info"><span class="drum-name">Snare</span><span class="drum-finger">☝️ Index</span></div>
+              <span class="drum-sound-indicator">🎵</span>
+            </div>
+            <div class="drum-item" data-finger="middle">
+              <span class="drum-icon drum-hh">🔔</span>
+              <div class="drum-info"><span class="drum-name">Hi-Hat Closed</span><span class="drum-finger">🖕 Middle</span></div>
+              <span class="drum-sound-indicator">🎵</span>
+            </div>
+            <div class="drum-item" data-finger="ring">
+              <span class="drum-icon drum-oh">🔔</span>
+              <div class="drum-info"><span class="drum-name">Hi-Hat Open</span><span class="drum-finger">💍 Ring</span></div>
+              <span class="drum-sound-indicator">🎵</span>
+            </div>
+            <div class="drum-item" data-finger="pinky">
+              <span class="drum-icon drum-clap">👏</span>
+              <div class="drum-info"><span class="drum-name">Clap</span><span class="drum-finger">🤙 Pinky</span></div>
+              <span class="drum-sound-indicator">🎵</span>
+            </div>
+            <div class="drum-item drum-fill">
+              <span class="drum-icon drum-fill-icon">✊</span>
+              <div class="drum-info"><span class="drum-name">Drum Fill</span><span class="drum-finger">Make a fist</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="gesture-reference" id="gesture-guide-fxpad" style="display:none;">
+          <div class="gesture-guide-title">FX Pad Guide</div>
+          <div class="gesture-grid">
+            <div class="gesture-item"><span class="gesture-icon">👈👉</span><span>X-Axis: <strong id="fx-guide-x">Reverb Mix</strong></span></div>
+            <div class="gesture-item"><span class="gesture-icon">👆👇</span><span>Y-Axis: <strong id="fx-guide-y">Delay Time</strong></span></div>
+            <div class="gesture-item"><span class="gesture-icon">🖐️</span><span>Open/close for expression</span></div>
+            <div class="gesture-item"><span class="gesture-icon">🎵</span><span>Drone sustains automatically</span></div>
+          </div>
+        </div>
+
+      </aside>
+
+      <!-- ───────────────────────────────────────────────────── -->
+      <!--  OVERLAYS                                             -->
+      <!-- ───────────────────────────────────────────────────── -->
+
+      <!-- Startup overlay -->
       <div id="startup-overlay" class="startup-overlay">
         <div class="startup-overlay-content">
-          <div class="startup-icon">🎵</div>
+          <div class="startup-icon-ring">
+            <span class="startup-icon">🎵</span>
+          </div>
           <h2 class="startup-title">Gesture Music Studio</h2>
-          <p class="startup-hint" id="startup-hint">🎥 Allow camera access and show your hand to begin</p>
+          <p class="startup-hint" id="startup-hint">Allow camera access and show your hand to begin</p>
           <div class="startup-loader" id="startup-loader">
-            <div class="loader-dot"></div>
-            <div class="loader-dot"></div>
-            <div class="loader-dot"></div>
+            <div class="loader-bar"><div class="loader-bar-fill"></div></div>
           </div>
         </div>
       </div>
@@ -130,13 +452,13 @@
       <!-- Song Guide Panel -->
       <div id="song-guide-panel" class="song-guide-panel" style="display:none;">
         <div class="song-guide-header">
-          <span class="song-guide-title">🎵 Song Guide</span>
+          <span class="song-guide-title">Song Guide</span>
           <div class="song-guide-select-wrap">
             <select id="song-guide-select" class="song-guide-select">
               <option value="">Choose a song...</option>
             </select>
           </div>
-          <button id="song-guide-close-btn" class="song-guide-close-btn" title="Close song guide">✕</button>
+          <button id="song-guide-close-btn" class="song-guide-close-btn" title="Close">✕</button>
         </div>
         <div id="song-guide-body" class="song-guide-body">
           <div class="song-guide-empty">
@@ -146,23 +468,23 @@
         </div>
         <div class="song-guide-footer" id="song-guide-footer" style="display:none;">
           <div class="song-guide-nav">
-            <button id="song-guide-prev-btn" class="btn btn-tiny" title="Previous step">◀ Back</button>
+            <button id="song-guide-prev-btn" class="btn btn-tiny">◀ Back</button>
             <span id="song-guide-step-counter" class="song-guide-step-counter">1/1</span>
-            <button id="song-guide-next-btn" class="btn btn-tiny" title="Next step">Next ▶</button>
+            <button id="song-guide-next-btn" class="btn btn-tiny">Next ▶</button>
           </div>
-          <button id="song-guide-apply-btn" class="btn btn-small btn-song-apply" title="Apply song settings (BPM, scale, instrument)">⚙️ Apply Settings</button>
+          <button id="song-guide-apply-btn" class="btn btn-small btn-song-apply">⚙️ Apply Settings</button>
         </div>
       </div>
 
       <!-- Tutorial Panel -->
       <div id="tutorial-panel" class="tutorial-panel" style="display:none;">
         <div class="tutorial-header">
-          <span class="tutorial-title">📖 Gesture Tutorial</span>
+          <span class="tutorial-title">Gesture Tutorial</span>
           <div class="tutorial-progress-bar">
             <div id="tutorial-progress-fill" class="tutorial-progress-fill"></div>
           </div>
           <span id="tutorial-step-counter" class="tutorial-step-counter">0/0</span>
-          <button id="tutorial-close-btn" class="tutorial-close-btn" title="Close tutorial">✕</button>
+          <button id="tutorial-close-btn" class="tutorial-close-btn">✕</button>
         </div>
         <div class="tutorial-body">
           <div class="tutorial-icon" id="tutorial-icon">🎯</div>
@@ -177,222 +499,15 @@
             <div id="tutorial-hold-fill" class="tutorial-hold-fill"></div>
           </div>
           <div class="tutorial-nav">
-            <button id="tutorial-prev-btn" class="btn btn-tiny" title="Previous step">◀ Back</button>
-            <button id="tutorial-skip-btn" class="btn btn-tiny" title="Skip to next step">Skip ▶</button>
+            <button id="tutorial-prev-btn" class="btn btn-tiny">◀ Back</button>
+            <button id="tutorial-skip-btn" class="btn btn-tiny">Skip ▶</button>
           </div>
         </div>
       </div>
 
-      <!-- Main Content -->
-      <main>
-        <!-- Camera + Overlay Section -->
-        <div class="camera-section">
-          <div class="video-container">
-            <video id="webcam" autoplay playsinline muted></video>
-            <canvas id="hand-overlay"></canvas>
-            <div id="status" class="status">Initializing...</div>
-            <div id="health-indicator" class="health-indicator" title="Animation loop health">
-              <span class="health-dot"></span>
-              <span id="health-fps" class="health-fps">-- FPS</span>
-              <span id="health-frame" class="health-frame">#0</span>
-            </div>
-          </div>
+      <!-- Hidden drum chip for JS wiring compatibility -->
+      <div id="drum-chip" style="display:none;"></div>
 
-          <!-- Info Panel -->
-          <div id="info-panel" class="info-panel">
-            <div class="info-placeholder">Show your hand to the camera</div>
-          </div>
-        </div>
-
-        <!-- Visualizer -->
-        <div class="visualizer-section">
-          <canvas id="visualizer"></canvas>
-          <div class="visualizer-labels">
-            <div class="viz-mode-select">
-              <button class="viz-mode-btn viz-mode-active" data-mode="spectrum">📊 3D</button>
-              <button class="viz-mode-btn" data-mode="particles">✨ Particles</button>
-              <button class="viz-mode-btn" data-mode="circular">⭕ Circular</button>
-              <button class="viz-mode-btn" data-mode="heatmap">🌡️ Heatmap</button>
-            </div>
-            <span class="hint" id="viz-mode-label">3D Spectrum • Move your hand to shape the sound</span>
-          </div>
-        </div>
-
-        <!-- Loop Station -->
-        <div id="loop-station" class="loop-station">
-          <div class="loop-station-header">
-            <span class="loop-station-title">🔄 Loop Station</span>
-            <div class="loop-station-controls">
-              <span id="loop-layer-count" class="loop-layer-count">0 layers</span>
-              <span id="loop-rec-indicator" class="loop-rec-indicator" style="display:none;">
-                <span class="rec-pulse">🔴</span> REC
-              </span>
-            </div>
-          </div>
-          <div id="loop-layers" class="loop-layers"></div>
-          <div class="loop-gesture-hint">
-            <span>🔄 Circle=Record</span>
-            <span>✋ Open=Stop</span>
-            <span>👍 Play/Stop</span>
-            <span>👎 Stop All</span>
-            <span>⬆️ Add Layer</span>
-            <span>⬇️ Remove</span>
-          </div>
-        </div>
-      </main>
-
-      <!-- Footer / Instructions -->
-      <footer>
-        <div class="instructions">
-          <div class="instruction-card">
-            <span class="step">1</span>
-            <span>Allow camera access</span>
-          </div>
-          <div class="instruction-card">
-            <span class="step">2</span>
-            <span>Show your hand to the camera</span>
-          </div>
-          <div class="instruction-card">
-            <span class="step">3</span>
-            <span>Move your hand in the air to make music!</span>
-          </div>
-        </div>
-
-        <div class="gesture-reference" id="gesture-guide-theremin">
-          <h3>🎯 Theremin Gesture Guide</h3>
-          <div class="gesture-grid">
-            <div class="gesture-item">
-              <span class="gesture-icon">✋</span>
-              <span>Pitch ↑ Access higher notes</span>
-            </div>
-            <div class="gesture-item">
-              <span class="gesture-icon">👇</span>
-              <span>Pitch ↓ Access lower notes</span>
-            </div>
-            <div class="gesture-item">
-              <span class="gesture-icon">👈👉</span>
-              <span>Filter sweep left to right</span>
-            </div>
-            <div class="gesture-item">
-              <span class="gesture-icon">🖐️</span>
-              <span>Open hand = more reverb</span>
-            </div>
-            <div class="gesture-item">
-              <span class="gesture-icon">✊</span>
-              <span>Fist = tight, dry sound</span>
-            </div>
-            <div class="gesture-item">
-              <span class="gesture-icon">🤘</span>
-              <span>More gestures coming soon!</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- FX Pad Guide -->
-        <div class="gesture-reference" id="gesture-guide-fxpad" style="display:none;">
-          <h3>🎚️ FX Pad Guide</h3>
-          <div class="gesture-grid">
-            <div class="gesture-item">
-              <span class="gesture-icon">👈👉</span>
-              <span>X-Axis: controls <strong id="fx-guide-x">Reverb Mix</strong></span>
-            </div>
-            <div class="gesture-item">
-              <span class="gesture-icon">👆👇</span>
-              <span>Y-Axis: controls <strong id="fx-guide-y">Delay Time</strong></span>
-            </div>
-            <div class="gesture-item">
-              <span class="gesture-icon">🔄</span>
-              <span>Change axes in the header dropdowns</span>
-            </div>
-            <div class="gesture-item">
-              <span class="gesture-icon">🖐️</span>
-              <span>Open/close hand for extra expression</span>
-            </div>
-            <div class="gesture-item">
-              <span class="gesture-icon">🎵</span>
-              <span>Effects process loops and arpeggiator too!</span>
-            </div>
-            <div class="gesture-item">
-              <span class="gesture-icon">⬆️⬇️</span>
-              <span>Change axis params in the header above</span>
-            </div>
-            <div class="gesture-item">
-              <span class="gesture-icon">🎚️</span>
-              <span>Move hand to shape your sound</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Drum Mode Guide -->
-        <div class="gesture-reference" id="gesture-guide-drum" style="display:none;">
-          <h3>🥁 Air Drum Kit Guide</h3>
-          <div class="drum-grid">
-            <div class="drum-item" data-finger="thumb">
-              <span class="drum-icon drum-kick">🥾</span>
-              <div class="drum-info">
-                <span class="drum-name">Kick Drum</span>
-                <span class="drum-finger">👍 Curl Thumb</span>
-              </div>
-              <span class="drum-sound-indicator">🎵</span>
-            </div>
-            <div class="drum-item" data-finger="index">
-              <span class="drum-icon drum-snare">🥁</span>
-              <div class="drum-info">
-                <span class="drum-name">Snare</span>
-                <span class="drum-finger">☝️ Curl Index</span>
-              </div>
-              <span class="drum-sound-indicator">🎵</span>
-            </div>
-            <div class="drum-item" data-finger="middle">
-              <span class="drum-icon drum-hh">🔔</span>
-              <div class="drum-info">
-                <span class="drum-name">Closed Hi-Hat</span>
-                <span class="drum-finger">🖕 Curl Middle</span>
-              </div>
-              <span class="drum-sound-indicator">🎵</span>
-            </div>
-            <div class="drum-item" data-finger="ring">
-              <span class="drum-icon drum-oh">🔔</span>
-              <div class="drum-info">
-                <span class="drum-name">Open Hi-Hat</span>
-                <span class="drum-finger">💍 Curl Ring</span>
-              </div>
-              <span class="drum-sound-indicator">🎵</span>
-            </div>
-            <div class="drum-item" data-finger="pinky">
-              <span class="drum-icon drum-clap">👏</span>
-              <div class="drum-info">
-                <span class="drum-name">Clap / Crash</span>
-                <span class="drum-finger">🤙 Curl Pinky</span>
-              </div>
-              <span class="drum-sound-indicator">🎵</span>
-            </div>
-            <div class="drum-item drum-fill">
-              <span class="drum-icon drum-fill-icon">✊</span>
-              <div class="drum-info">
-                <span class="drum-name">Drum Fill</span>
-                <span class="drum-finger">Make a fist!</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Keyboard Shortcuts Hint -->
-        <div class="keyboard-hint">
-          <span class="keyboard-hint-icon">⌨️</span>
-          <span class="keyboard-hint-text">
-            <kbd>1</kbd>-<kbd>4</kbd> Instruments &nbsp;·&nbsp;
-            <kbd>M</kbd> Metro &nbsp;·&nbsp;
-            <kbd>A</kbd> Arp &nbsp;·&nbsp;
-            <kbd>Q</kbd> Quantize &nbsp;·&nbsp;
-            <kbd>V</kbd> Viz &nbsp;·&nbsp;
-            <kbd>T</kbd> Tutorial &nbsp;·&nbsp;
-            <kbd>S</kbd> Scale &nbsp;·&nbsp;
-            <kbd>R</kbd> Drum Map &nbsp;·&nbsp;
-            <kbd>+</kbd>/<kbd>-</kbd> BPM
-          </span>
-        </div>
-      </footer>
     </div>
 
   </body>
