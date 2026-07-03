@@ -78,6 +78,23 @@ const songGuideApplyBtn = document.getElementById("song-guide-apply-btn");
 const songGuideCloseBtn = document.getElementById("song-guide-close-btn");
 const songGuideStepCounter = document.getElementById("song-guide-step-counter");
 
+// ─── New UI DOM Refs ────────────────────────────────────────────────────
+const instrumentNavBtns = document.querySelectorAll(".instrument-btn");
+const layerStack = document.getElementById("layer-stack");
+const layerEmptyMsg = document.getElementById("layer-empty-msg");
+const addLayerBtn = document.getElementById("add-layer-btn");
+const stageInstrumentName = document.getElementById("stage-instrument-name");
+const stageInstrumentDesc = document.getElementById("stage-instrument-desc");
+const chordModeBtn = document.getElementById("chord-mode-btn");
+const droneBtn = document.getElementById("drone-btn");
+const drumMappingRow = document.getElementById("drum-mapping-row");
+const scaleRow = document.getElementById("scale-row");
+const chordRow = document.getElementById("chord-row");
+const droneRow = document.getElementById("drone-row");
+const arpSection = document.getElementById("arp-section");
+const aiSection = document.getElementById("ai-section");
+const aiRow = document.getElementById("ai-row");
+
 // ─── State ────────────────────────────────────────────────────────────────
 
 let handTracker = null;
@@ -100,6 +117,25 @@ let isMidiRecording = false;
 
 // Tutorial state
 let tutorial = null;
+
+// ─── Instrument Layer State ─────────────────────────────────────────────
+// Layers allow multiple instruments to play simultaneously.
+// Each layer has { id, type, synth, effects, volumeNode, volume }
+let instrumentLayers = [];  // array of active layers
+let layerIdCounter = 0;
+const MAX_LAYERS = 3;
+
+// ─── Chord Mode State ───────────────────────────────────────────────────
+// Chord mode plays a 3-note chord instead of a single note.
+let isChordModeOn = false;
+let previousChordNotes = []; // track currently sounding chord notes
+
+// ─── Ambient Drone State ────────────────────────────────────────────────
+// A background ambient drone pad that slowly evolves.
+let isDroneOn = false;
+let droneSynth = null;
+let droneEffects = [];
+let droneNote = "C2";
 
 // AI Melody state
 let isAiMelodyOn = false;
@@ -503,7 +539,6 @@ function setupMetronome(on) {
     }, "4n"); // Every quarter note
   }
 }
-
 /** Handle tap tempo from fist gesture */
 function handleTapTempo() {
   const now = Date.now();
@@ -536,221 +571,226 @@ function createInstrument(type) {
   currentEffects = [];
 
   switch (type) {
+    // THEREMIN — Lush cello/theremin hybrid
+    // Two detuned oscillators, slow vibrato LFO, chorus for stereo width,
+    // long plate reverb + analog delay. Sounds like a real theremin/cello.
     case "theremin": {
-      const rev = new Tone.Reverb({ decay: 2, wet: 0.3 });
-      const del = new Tone.FeedbackDelay({
-        delayTime: "8n",
-        feedback: 0.2,
-        wet: 0.2,
-      });
+      const thRevPlate = new Tone.Reverb({ decay: 4.5, wet: 0.38, preDelay: 0.02 });
+      const thDelay    = new Tone.FeedbackDelay({ delayTime: "6n", feedback: 0.22, wet: 0.18 });
+      const thChorus   = new Tone.Chorus({ frequency: 0.6, delayTime: 3.5, depth: 0.5, wet: 0.4 });
+      const thFilter   = new Tone.Filter({ frequency: 2400, type: "lowpass", Q: 0.8 });
+      const thVibrato  = new Tone.Vibrato({ frequency: 5.2, depth: 0.06, wet: 0.55 });
 
-      synth = new Tone.MonoSynth({
-        oscillator: { type: "sine" },
-        envelope: { attack: 0.05, decay: 0.1, sustain: 0.8, release: 1.5 },
-        filter: { Q: 1, frequency: 800 },
+      // Main voice: warm triangle with 8 harmonics (cello-like fundamental)
+      const thVoice1 = new Tone.MonoSynth({
+        oscillator: { type: "triangle8" },
+        envelope: { attack: 0.12, decay: 0.2, sustain: 0.85, release: 2.2 },
+        filter: { Q: 2, type: "lowpass", frequency: 3000 },
         filterEnvelope: {
-          attack: 0.1,
-          decay: 0.2,
-          sustain: 0.5,
-          release: 1.0,
-          baseFrequency: 200,
-          octaves: 3,
+          attack: 0.18, decay: 0.35, sustain: 0.6, release: 2.0,
+          baseFrequency: 180, octaves: 2.8,
         },
       });
 
-      // Serial chain: synth → reverb → delay → master
-      synth.chain(rev, del, Tone.Destination);
-      currentEffects = [rev, del];
+      // Second voice: detuned sine for warmth (natural beating effect)
+      const thVoice2 = new Tone.MonoSynth({
+        oscillator: { type: "sine" },
+        envelope: { attack: 0.18, decay: 0.2, sustain: 0.75, release: 2.8 },
+        filter: { Q: 1, type: "lowpass", frequency: 1800 },
+        filterEnvelope: {
+          attack: 0.22, decay: 0.3, sustain: 0.5, release: 2.2,
+          baseFrequency: 150, octaves: 2.2,
+        },
+        volume: -8,
+      });
+
+      const thMix = new Tone.Gain(0.75);
+      thVoice1.chain(thVibrato, thMix);
+      thVoice2.connect(thMix);
+      thMix.chain(thFilter, thChorus, thRevPlate, thDelay, Tone.Destination);
+
+      // Slow detune drift LFO for natural feel
+      const thDetuneLFO = new Tone.LFO({ frequency: 0.15, min: -4, max: 4 }).start();
+      thDetuneLFO.connect(thVoice2.detune);
+      synth = {
+        _v1: thVoice1, _v2: thVoice2,
+        triggerAttack: (note, time, vel) => { thVoice1.triggerAttack(note, time, vel); thVoice2.triggerAttack(note, time, (vel || 0.7) * 0.6); },
+        triggerRelease: (time) => { thVoice1.triggerRelease(time); thVoice2.triggerRelease(time); },
+        triggerAttackRelease: (note, dur, time, vel) => { thVoice1.triggerAttackRelease(note, dur, time, vel); thVoice2.triggerAttackRelease(note, dur, time, (vel || 0.7) * 0.6); },
+        set: (params) => { if (params.filterFrequency !== undefined) { thVoice1.set({ filterFrequency: params.filterFrequency }); thVoice2.set({ filterFrequency: params.filterFrequency * 0.75 }); } },
+        get volume() { return thVoice1.volume; },
+        dispose: () => { thDetuneLFO.stop().dispose(); thVoice1.dispose(); thVoice2.dispose(); thMix.dispose(); },
+      };
+      currentEffects = [thRevPlate, thDelay, thChorus, thFilter, thVibrato, thMix];
       return;
     }
 
+    // DRUM KIT — Studio-quality acoustic kit
     case "drumkit": {
-      // ─── Drum Master Bus ───────────────────────────────────────────
-      // Compressor glues the kit together, makes hits punchy
-      const drumCompressor = new Tone.Compressor({
-        ratio: 6,
-        threshold: -20,
-        attack: 0.002,
-        release: 0.2,
-      });
+      const drumComp   = new Tone.Compressor({ ratio: 5, threshold: -18, attack: 0.002, release: 0.15, knee: 6 });
+      const drumHiPass = new Tone.Filter({ frequency: 40,    type: "highpass", Q: 0.5 });
+      const drumLoPass = new Tone.Filter({ frequency: 14000, type: "lowpass",  Q: 0.7 });
+      const drumEQ     = new Tone.EQ3({ low: 2, mid: -1, high: 1, lowFrequency: 250, highFrequency: 4000 });
+      const drumRev    = new Tone.Reverb({ decay: 1.2, wet: 0.12, preDelay: 0.005 });
+      const drumGain   = new Tone.Gain(0.9);
+      drumComp.chain(drumHiPass, drumEQ, drumLoPass, drumRev, drumGain, Tone.Destination);
 
-      // Subtle EQ: highpass removes sub rumble, lowpass tames harshness
-      const drumHiPass = new Tone.Filter(60, "highpass");
-      const drumLoPass = new Tone.Filter(12000, "lowpass");
+      const kickSub   = new Tone.MembraneSynth({ pitchDecay: 0.055, octaves: 9,  envelope: { attack: 0.001, decay: 0.55, sustain: 0.0, release: 0.7  } });
+      const kickBody  = new Tone.MembraneSynth({ pitchDecay: 0.025, octaves: 5,  envelope: { attack: 0.001, decay: 0.22, sustain: 0.0, release: 0.25 } });
+      const kickClick = new Tone.NoiseSynth({ noise: { type: "white" },          envelope: { attack: 0.0005, decay: 0.012, sustain: 0.0, release: 0.02 } });
+      kickSub.volume.value = -3; kickBody.volume.value = -8;
+      const kickClickF = new Tone.Filter({ frequency: 4500, type: "bandpass", Q: 2 });
+      kickSub.chain(drumComp); kickBody.chain(drumComp); kickClick.chain(kickClickF, drumComp);
+      const kick = {
+        triggerAttackRelease: (note, duration, time, velocity) => {
+          const v = velocity ?? 0.85;
+          kickSub.triggerAttackRelease("C1",  duration, time, v);
+          kickBody.triggerAttackRelease("C2", duration, time, v * 0.65);
+          kickClick.triggerAttackRelease(duration, time, v * 0.5);
+        },
+        dispose: () => { kickSub.dispose(); kickBody.dispose(); kickClick.dispose(); kickClickF.dispose(); },
+      };
 
-      // Room reverb + subtle slap delay
-      const drumReverb = new Tone.Reverb({ decay: 0.8, wet: 0.10 });
-      const drumDelay = new Tone.FeedbackDelay({
-        delayTime: "32n",
-        feedback: 0.06,
-        wet: 0.06,
-      });
-
-      // Master drum volume
-      const drumGain = new Tone.Gain(0.85);
-
-      // Chain bus: compressor → highpass → lowpass → reverb → delay → gain → master
-      drumCompressor.chain(drumHiPass, drumLoPass, drumReverb, drumDelay, drumGain, Tone.Destination);
-
-      // ─── Kick Drum ────────────────────────────────────────────────
-      // Deep, punchy kick with fast pitch sweep for attack click
-      const kick = new Tone.MembraneSynth({
-        pitchDecay: 0.02,
-        octaves: 8,
-        envelope: { attack: 0.001, decay: 0.35, sustain: 0.001, release: 0.5 },
-      }).chain(drumCompressor);
-      kick.volume.value = -2;
-
-      // ─── Snare Drum (layered: shell body + wire buzz) ────────────
-      // Body: MembraneSynth tuned to ~200Hz for the shell resonance
-      const snareBody = new Tone.MembraneSynth({
-        pitchDecay: 0.06,
-        octaves: 3,
-        envelope: { attack: 0.001, decay: 0.15, sustain: 0.001, release: 0.1 },
-      });
-      // Wires: high-passed noise for the snare wire sizzle
-      const snareWiresFilter = new Tone.Filter(2500, "highpass");
-      const snareWires = new Tone.NoiseSynth({
-        noise: { type: "white" },
-        envelope: { attack: 0.001, decay: 0.08, sustain: 0.001, release: 0.12 },
-      });
-      snareWires.chain(snareWiresFilter, drumCompressor);
-      snareBody.chain(drumCompressor);
-
+      const snareBody  = new Tone.MembraneSynth({ pitchDecay: 0.045, octaves: 2.5, envelope: { attack: 0.001, decay: 0.19, sustain: 0.0, release: 0.18 } });
+      snareBody.volume.value = -4;
+      const snareWires = new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.001, decay: 0.135, sustain: 0.0, release: 0.18 } });
+      const sWiresHP = new Tone.Filter({ frequency: 1800, type: "highpass", Q: 1.2 });
+      const sWiresLP = new Tone.Filter({ frequency: 8000, type: "lowpass",  Q: 0.8 });
+      const snareCrack  = new Tone.NoiseSynth({ noise: { type: "pink" }, envelope: { attack: 0.0005, decay: 0.025, sustain: 0.0, release: 0.03 } });
+      const sCrackF = new Tone.Filter({ frequency: 2800, type: "bandpass", Q: 3 });
+      snareBody.chain(drumComp);
+      snareWires.chain(sWiresHP, sWiresLP, drumComp);
+      snareCrack.chain(sCrackF, drumComp);
       const snare = {
         triggerAttackRelease: (note, duration, time, velocity) => {
-          const v = velocity ?? 0.8;
-          snareBody.triggerAttackRelease(note || "D3", duration, time, v * 0.45);
-          snareWires.triggerAttackRelease(duration, time, v * 0.65);
+          const v = velocity ?? 0.82;
+          snareBody.triggerAttackRelease("D3", duration, time, v * 0.55);
+          snareWires.triggerAttackRelease(duration, time, v * 0.7);
+          snareCrack.triggerAttackRelease(duration, time, v * 0.45);
         },
-        dispose: () => {
-          snareBody.dispose();
-          snareWires.dispose();
-          snareWiresFilter.dispose();
-        },
+        dispose: () => { snareBody.dispose(); snareWires.dispose(); snareCrack.dispose(); sWiresHP.dispose(); sWiresLP.dispose(); sCrackF.dispose(); },
       };
 
-      // ─── Hi-Hat Closed ────────────────────────────────────────────
-      // Crisp, short metallic click
-      const hihatClosed = new Tone.MetalSynth({
-        frequency: 480,
-        envelope: { attack: 0.001, decay: 0.04, sustain: 0.001, release: 0.04 },
-        harmonicity: 9.5,
-        modulationIndex: 50,
-        resonance: 1000,
-      }).chain(drumCompressor);
-      hihatClosed.volume.value = -6;
+      // Hi-Hat Closed: crisp, bright
+      const hihatClosed = new Tone.MetalSynth({ frequency: 520, envelope: { attack: 0.0003, decay: 0.055, sustain: 0.0, release: 0.06 }, harmonicity: 11.2, modulationIndex: 62, resonance: 4200, octaves: 1.8 });
+      hihatClosed.volume.value = -7; hihatClosed.chain(drumComp);
 
-      // ─── Hi-Hat Open ──────────────────────────────────────────────
-      // Longer ring, slightly darker
-      const hihatOpen = new Tone.MetalSynth({
-        frequency: 320,
-        envelope: { attack: 0.001, decay: 0.28, sustain: 0.001, release: 0.35 },
-        harmonicity: 7,
-        modulationIndex: 30,
-        resonance: 600,
-      }).chain(drumCompressor);
-      hihatOpen.volume.value = -8;
+      // Hi-Hat Open: longer ring
+      const hihatOpen = new Tone.MetalSynth({ frequency: 420, envelope: { attack: 0.0005, decay: 0.38, sustain: 0.01, release: 0.5 }, harmonicity: 8.5, modulationIndex: 42, resonance: 3000, octaves: 1.5 });
+      hihatOpen.volume.value = -9; hihatOpen.chain(drumComp);
 
-      // ─── Clap (layered noise bursts) ──────────────────────────────
-      // Layer 1: bright white noise for the transient attack
-      const clapNoise1 = new Tone.NoiseSynth({
-        noise: { type: "white" },
-        envelope: { attack: 0.002, decay: 0.10, sustain: 0.001, release: 0.15 },
-      });
-      // Layer 2: darker body for thickness
-      const clapNoise2 = new Tone.NoiseSynth({
-        noise: { type: "brown" },
-        envelope: { attack: 0.005, decay: 0.18, sustain: 0.001, release: 0.25 },
-      });
-      const clapFilter = new Tone.Filter(600, "highpass");
-      clapNoise1.chain(clapFilter, drumCompressor);
-      clapNoise2.chain(clapFilter, drumCompressor);
-
+      // Clap: 4 staggered noise bursts
+      const mkClap = () => new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.001, decay: 0.075, sustain: 0.0, release: 0.1 } });
+      const cB1 = mkClap(), cB2 = mkClap(), cB3 = mkClap();
+      const cBody = new Tone.NoiseSynth({ noise: { type: "pink" }, envelope: { attack: 0.003, decay: 0.22, sustain: 0.0, release: 0.28 } });
+      const cHP = new Tone.Filter({ frequency: 900,  type: "highpass", Q: 1.5 });
+      const cLP = new Tone.Filter({ frequency: 9000, type: "lowpass",  Q: 0.6 });
+      cB1.chain(cHP, cLP, drumComp); cB2.chain(cHP, cLP, drumComp);
+      cB3.chain(cHP, cLP, drumComp); cBody.chain(cHP, cLP, drumComp);
       const clap = {
         triggerAttackRelease: (note, duration, time, velocity) => {
-          const v = velocity ?? 0.7;
-          clapNoise1.triggerAttackRelease(duration, time, v);
-          clapNoise2.triggerAttackRelease(duration, time, v * 0.5);
+          const v = velocity ?? 0.75; const t = time ?? Tone.now();
+          cB1.triggerAttackRelease(duration, t,           v);
+          cB2.triggerAttackRelease(duration, t + 0.007,   v * 0.85);
+          cB3.triggerAttackRelease(duration, t + 0.013,   v * 0.7);
+          cBody.triggerAttackRelease(duration, t + 0.005, v * 0.45);
         },
-        dispose: () => {
-          clapNoise1.dispose();
-          clapNoise2.dispose();
-          clapFilter.dispose();
-        },
+        dispose: () => { cB1.dispose(); cB2.dispose(); cB3.dispose(); cBody.dispose(); cHP.dispose(); cLP.dispose(); },
       };
 
-      // Store all drum instruments as a group
       synth = { kick, snare, hihatClosed, hihatOpen, clap };
-      currentEffects = [drumCompressor, drumHiPass, drumLoPass, drumReverb, drumDelay, drumGain];
+      currentEffects = [drumComp, drumHiPass, drumEQ, drumLoPass, drumRev, drumGain];
       drumTriggered = { thumb: false, index: false, middle: false, ring: false, pinky: false };
       return;
     }
 
+
+    // FX PAD — Evolving cinematic orchestra drone
+    // PolySynth on a rich 5-note chord, tremolo, slow filter sweep LFO,
+    // concert-hall reverb. Sounds like a real strings/orchestra section.
     case "fxpad": {
-      // Create dedicated effects chain for X/Y pad control
-      const fxReverb = new Tone.Reverb({ decay: 4, wet: 0.3 });
-      const fxDelay = new Tone.FeedbackDelay({
-        delayTime: "4n",
-        feedback: 0.3,
-        wet: 0.3,
-      });
-      const fxFilter = new Tone.Filter({
-        frequency: 1000,
-        type: "lowpass",
-        Q: 1,
-      });
-      const fxDistortion = new Tone.Distortion({
-        distortion: 0,
-        oversample: "none",
-      });
-      // Chorus for stereo width and movement
-      const fxChorus = new Tone.Chorus({
-        frequency: 0.4,
-        delayTime: 2.5,
-        depth: 0.4,
+      const fxReverb     = new Tone.Reverb({ decay: 6, wet: 0.45, preDelay: 0.04 });
+      const fxDelay      = new Tone.FeedbackDelay({ delayTime: "4n", feedback: 0.28, wet: 0.22 });
+      const fxFilter     = new Tone.Filter({ frequency: 900, type: "lowpass", Q: 1.5 });
+      const fxDistortion = new Tone.Distortion({ distortion: 0, oversample: "2x" });
+      const fxChorus     = new Tone.Chorus({ frequency: 0.35, delayTime: 4, depth: 0.65, wet: 0.5 });
+      const fxTremolo    = new Tone.Tremolo({ frequency: 0.18, depth: 0.35, wet: 0.5 }).start();
+      const fxEQ         = new Tone.EQ3({ low: 3, mid: 0, high: -2 });
+
+      // Rich polyphonic voice with sawtooth harmonics (orchestral swell)
+      const droneVoice = new Tone.PolySynth(Tone.Synth, {
+        oscillator: { type: "sawtooth4" },
+        envelope: { attack: 3.5, decay: 3, sustain: 0.65, release: 6.0 },
+        volume: -10,
       });
 
-      // Warmer drone with audible volume so effects have signal to process
-      const drone = new Tone.FMSynth({
-        harmonicity: 0.5,
-        modulationIndex: 0.5,
-        envelope: { attack: 2, decay: 2, sustain: 0.4, release: 4 },
-      });
-      drone.volume.value = -14; // Raised from -30 to be clearly audible
+      droneVoice.chain(fxEQ, fxDistortion, fxChorus, fxFilter, fxTremolo, fxReverb, fxDelay, Tone.Destination);
+      // 5-note orchestral chord: root, octave, fifth, third, seventh
+      droneVoice.triggerAttack(["C2", "C3", "G3", "E4", "B4"]);
 
-      // Chain: drone → distortion → chorus → filter → reverb → delay → master
-      drone.chain(fxDistortion, fxChorus, fxFilter, fxReverb, fxDelay, Tone.Destination);
-      drone.triggerAttack("C3");
+      // Filter sweeps slowly for organic evolution
+      const filterLFO = new Tone.LFO({ frequency: 0.04, min: 400, max: 1800 }).start();
+      filterLFO.connect(fxFilter.frequency);
 
-      synth = drone;
-      currentEffects = [fxReverb, fxDelay, fxFilter, fxDistortion, fxChorus];
-      synth._fxReverb = fxReverb;
-      synth._fxDelay = fxDelay;
-      synth._fxFilter = fxFilter;
+      synth = droneVoice;
+      synth._fxReverb     = fxReverb;
+      synth._fxDelay      = fxDelay;
+      synth._fxFilter     = fxFilter;
       synth._fxDistortion = fxDistortion;
-      synth._fxChorus = fxChorus;
+      synth._fxChorus     = fxChorus;
+      synth._filterLFO    = filterLFO;
+      synth._fxTremolo    = fxTremolo;
+
+      currentEffects = [fxReverb, fxDelay, fxFilter, fxDistortion, fxChorus, fxTremolo, fxEQ, filterLFO];
       return;
     }
 
+    // KAOSS PAD — 3-voice supersaw cinematic pad
+    // Three slightly detuned FMSynths for a classic supersaw chorus effect
+    // (inspired by Roland JP-8000). Phaser + chorus + lush reverb.
     case "kaoss": {
-      const autoFilter = new Tone.AutoFilter({
-        frequency: "8n",
-        depth: 0.5,
-      });
-      const freeverb = new Tone.Freeverb({
-        roomSize: 0.6,
-        wet: 0.3,
-      });
+      const kaossReverb = new Tone.Reverb({ decay: 5,   wet: 0.42, preDelay: 0.03 });
+      const kaossDelay  = new Tone.FeedbackDelay({ delayTime: "8n.", feedback: 0.3, wet: 0.22 });
+      const kaossChorus = new Tone.Chorus({ frequency: 0.45, delayTime: 5, depth: 0.8, wet: 0.55 });
+      const kaossPhaser = new Tone.Phaser({ frequency: 0.3, octaves: 3, baseFrequency: 700, wet: 0.5 });
+      const kaossFilter = new Tone.Filter({ frequency: 1800, type: "lowpass", Q: 2.5 });
+      const kaossEQ     = new Tone.EQ3({ low: 2, mid: 0, high: -1 });
+      const kaosMix     = new Tone.Gain(0.72);
 
-      synth = new Tone.FMSynth({
-        harmonicity: 1.5,
-        modulationIndex: 2,
+      // Three slightly detuned sawtooth FMSynths (supersaw voices)
+      const mkKaoss = (detune, vol) => new Tone.FMSynth({
+        harmonicity: 3.5, modulationIndex: 8, detune,
+        oscillator:         { type: "sawtooth6" },
+        envelope:           { attack: 0.08, decay: 0.4, sustain: 0.7, release: 2.5 },
+        modulation:         { type: "square" },
+        modulationEnvelope: { attack: 0.1, decay: 0.5, sustain: 0.6, release: 2.0 },
+        volume: vol,
       });
+      const kV1 = mkKaoss(0, -8); const kV2 = mkKaoss(7, -13); const kV3 = mkKaoss(-7, -13);
+      kV1.connect(kaosMix); kV2.connect(kaosMix); kV3.connect(kaosMix);
+      kaosMix.chain(kaossEQ, kaossFilter, kaossPhaser, kaossChorus, kaossReverb, kaossDelay, Tone.Destination);
 
-      // Serial chain: synth → autoFilter → freeverb → master
-      synth.chain(autoFilter, freeverb, Tone.Destination);
-      currentEffects = [autoFilter, freeverb];
+      synth = {
+        _v1: kV1, _v2: kV2, _v3: kV3,
+        triggerAttack: (note, time, vel) => {
+          kV1.triggerAttack(note, time, vel);
+          kV2.triggerAttack(note, time, (vel || 0.7) * 0.7);
+          kV3.triggerAttack(note, time, (vel || 0.7) * 0.7);
+        },
+        triggerRelease: (time) => {
+          kV1.triggerRelease(time); kV2.triggerRelease(time); kV3.triggerRelease(time);
+        },
+        triggerAttackRelease: (note, dur, time, vel) => {
+          kV1.triggerAttackRelease(note, dur, time, vel);
+          kV2.triggerAttackRelease(note, dur, time, (vel || 0.7) * 0.7);
+          kV3.triggerAttackRelease(note, dur, time, (vel || 0.7) * 0.7);
+        },
+        set: (params) => { kV1.set(params); kV2.set(params); kV3.set(params); },
+        get volume() { return kV1.volume; },
+        dispose: () => { kV1.dispose(); kV2.dispose(); kV3.dispose(); kaosMix.dispose(); },
+      };
+
+      currentEffects = [kaossReverb, kaossDelay, kaossChorus, kaossPhaser, kaossFilter, kaossEQ, kaosMix];
       return;
     }
 
@@ -984,9 +1024,15 @@ function updateAudio(data) {
 
   if (!data.hasHand) {
     if (isSingleSynth) synth.triggerRelease();
+    // Also release chord notes
+    if (isChordModeOn && previousChordNotes.length > 0) {
+      previousChordNotes = [];
+    }
     previousNote = null;
     previousMidiNote = null;
     previousAiNote = null;
+    // Update layers
+    updateLayerAudio(data);
     return;
   }
 
@@ -1003,6 +1049,28 @@ function updateAudio(data) {
 
   switch (currentInstrument) {
     case "theremin": {
+      // Chord mode: play a full chord instead of a single note
+      if (isChordModeOn) {
+        if (currentNote !== previousNote) {
+          // Release old chord
+          if (synth.triggerRelease) synth.triggerRelease();
+          // Build and trigger new chord
+          const chordNotes = buildChord(currentNote, data);
+          chordNotes.forEach((n) => {
+            try { synth.triggerAttack(n, undefined, gain * 0.6); } catch(e) {}
+          });
+          previousNote = currentNote;
+          previousChordNotes = chordNotes;
+          lastGain = gain;
+        }
+        // Throttled volume
+        if (Math.abs(gain - lastGain) > CHANGE_THRESHOLD) {
+          synth.volume.rampTo(Tone.gainToDb(gain * 0.6), 0.04);
+          lastGain = gain;
+        }
+        break;
+      }
+
       // Trigger note only when it changes
       if (currentNote !== previousNote) {
         // Play AI melody notes if available
@@ -1233,6 +1301,9 @@ function updateAudio(data) {
         previousNote = currentNote;
       }
   }
+
+  // Feed note to all active layers
+  updateLayerAudio(data);
 }
 
 // ─── UI Updates ──────────────────────────────────────────────────────────
@@ -1513,6 +1584,13 @@ function cleanup() {
   disposeSynth();
   currentEffects.forEach((fx) => fx.dispose());
   currentEffects = [];
+
+  // Dispose all layers
+  disposeLayers();
+
+  // Stop drone
+  stopDrone();
+
   if (volumeAnalyser) {
     Tone.getDestination().disconnect(volumeAnalyser);
     volumeAnalyser.dispose();
@@ -1526,6 +1604,361 @@ function cleanup() {
 
   // Stop Transport
   Tone.Transport.stop();
+}
+
+// ─── Instrument Layers System ────────────────────────────────────────────
+
+/**
+ * Creates a new instrument layer of the given type and routes it to destination.
+ * Returns the layer object { id, type, synth, effects, volumeNode, volume }.
+ */
+function createLayer(type) {
+  if (instrumentLayers.length >= MAX_LAYERS) {
+    showToast(`Max ${MAX_LAYERS} layers reached`, "error");
+    return null;
+  }
+  const id = ++layerIdCounter;
+  const volumeNode = new Tone.Volume(-6); // default -6dB for layers
+  volumeNode.toDestination();
+
+  // Build a simplified synth per type
+  let layerSynth = null;
+  let layerEffects = [];
+
+  switch (type) {
+    case "theremin": {
+      const rev = new Tone.Reverb({ decay: 2, wet: 0.25 });
+      layerSynth = new Tone.MonoSynth({
+        oscillator: { type: "sine" },
+        envelope: { attack: 0.05, decay: 0.1, sustain: 0.8, release: 1.5 },
+      });
+      layerSynth.chain(rev, volumeNode);
+      layerEffects = [rev];
+      break;
+    }
+    case "kaoss": {
+      const freeverb = new Tone.Freeverb({ roomSize: 0.5, wet: 0.25 });
+      layerSynth = new Tone.FMSynth({ harmonicity: 1.5, modulationIndex: 2 });
+      layerSynth.chain(freeverb, volumeNode);
+      layerEffects = [freeverb];
+      break;
+    }
+    case "fxpad": {
+      const rev = new Tone.Reverb({ decay: 3, wet: 0.35 });
+      layerSynth = new Tone.FMSynth({ harmonicity: 0.5, modulationIndex: 0.5 });
+      layerSynth.chain(rev, volumeNode);
+      layerSynth.triggerAttack("C3");
+      layerEffects = [rev];
+      break;
+    }
+    default: {
+      layerSynth = new Tone.Synth();
+      layerSynth.connect(volumeNode);
+    }
+  }
+
+  const layer = { id, type, synth: layerSynth, effects: layerEffects, volumeNode, volume: -6 };
+  instrumentLayers.push(layer);
+  renderLayerStack();
+  return layer;
+}
+
+/** Dispose and remove a specific layer by id. */
+function removeLayer(id) {
+  const idx = instrumentLayers.findIndex((l) => l.id === id);
+  if (idx === -1) return;
+  const layer = instrumentLayers[idx];
+  // Stop any playing note
+  if (layer.synth && layer.synth.triggerRelease) {
+    try { layer.synth.triggerRelease(); } catch(e) {}
+  }
+  // Dispose
+  if (layer.synth) {
+    if (typeof layer.synth.dispose === "function") layer.synth.dispose();
+  }
+  layer.effects.forEach((fx) => { try { fx.dispose(); } catch(e) {} });
+  layer.volumeNode.dispose();
+  instrumentLayers.splice(idx, 1);
+  renderLayerStack();
+}
+
+/** Dispose all layers (called on cleanup). */
+function disposeLayers() {
+  while (instrumentLayers.length > 0) {
+    removeLayer(instrumentLayers[0].id);
+  }
+}
+
+/** Feed a note event to all active layers. */
+function updateLayerAudio(data) {
+  if (!isAudioReady || instrumentLayers.length === 0) return;
+  const { currentNote, smoothedY, hasHand } = data;
+  const gain = Math.max(1 - smoothedY * 0.9, 0.05);
+
+  for (const layer of instrumentLayers) {
+    if (!layer.synth) continue;
+    try {
+      if (!hasHand) {
+        if (layer.synth.triggerRelease) layer.synth.triggerRelease();
+        layer._prevNote = null;
+        continue;
+      }
+      // For melodic layers: trigger note on change
+      if (layer.type !== "drumkit" && layer.synth.triggerAttack && layer.synth.triggerRelease) {
+        if (currentNote !== layer._prevNote) {
+          layer.synth.triggerRelease();
+          layer.synth.triggerAttack(currentNote, undefined, gain * 0.7);
+          layer._prevNote = currentNote;
+        }
+        // Update volume
+        if (layer.volumeNode) {
+          layer.volumeNode.volume.rampTo(Tone.gainToDb(gain * 0.7), 0.05);
+        }
+      }
+    } catch (e) { /* ignore transient errors on layer audio */ }
+  }
+}
+
+/** Render the layer stack UI in the sidebar. */
+const INSTRUMENT_ICONS = {
+  theremin: "🎹",
+  drumkit:  "🥁",
+  kaoss:    "🎛️",
+  fxpad:    "🎚️",
+};
+
+const INSTRUMENT_NAMES = {
+  theremin: "Theremin",
+  drumkit:  "Drums",
+  kaoss:    "Kaoss Pad",
+  fxpad:    "FX Pad",
+};
+
+function renderLayerStack() {
+  if (!layerStack) return;
+
+  if (instrumentLayers.length === 0) {
+    layerStack.innerHTML = `<div class="layer-empty" id="layer-empty-msg"><span>No layers — main instrument playing</span></div>`;
+    return;
+  }
+
+  layerStack.innerHTML = "";
+  for (const layer of instrumentLayers) {
+    const card = document.createElement("div");
+    card.className = "layer-card";
+    card.dataset.layerId = layer.id;
+    card.innerHTML = `
+      <span class="layer-icon">${INSTRUMENT_ICONS[layer.type] || "🎵"}</span>
+      <span class="layer-name">${INSTRUMENT_NAMES[layer.type] || layer.type}</span>
+      <input type="range" class="layer-volume" min="-30" max="0" value="${layer.volume}" step="1" title="Layer volume" />
+      <button class="layer-remove" title="Remove layer">✕</button>
+    `;
+
+    // Volume slider
+    const slider = card.querySelector(".layer-volume");
+    slider.addEventListener("input", (e) => {
+      layer.volume = parseInt(e.target.value);
+      if (layer.volumeNode) {
+        layer.volumeNode.volume.rampTo(layer.volume, 0.05);
+      }
+    });
+
+    // Remove button
+    const removeBtn = card.querySelector(".layer-remove");
+    removeBtn.addEventListener("click", () => {
+      removeLayer(layer.id);
+      showToast(`Removed ${INSTRUMENT_NAMES[layer.type]} layer`);
+    });
+
+    layerStack.appendChild(card);
+  }
+}
+
+// ─── Chord Mode ─────────────────────────────────────────────────────────
+
+/**
+ * Given a root note name (e.g. "C4"), build a chord based on current scale.
+ * gesture controls voicing: open = major triad, fist = minor, peace = suspended
+ */
+function buildChord(rootNote, gestureData) {
+  // Parse note name and octave (e.g. "C4" → ["C", 4])
+  const match = rootNote.match(/^([A-G]#?)([0-9])$/);
+  if (!match) return [rootNote];
+  const noteName = match[1];
+  const octave = parseInt(match[2]);
+  const noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  const rootIdx = noteNames.indexOf(noteName);
+  if (rootIdx === -1) return [rootNote];
+
+  // Gesture → chord voicing intervals in semitones
+  const gestureName = gestureData?.gesture?.name || "";
+  let intervals;
+  if (gestureName === "Victory") {
+    intervals = [0, 5, 7];    // Suspended 4th
+  } else if (gestureName === "Closed_Fist") {
+    intervals = [0, 3, 7];    // Minor triad
+  } else {
+    intervals = [0, 4, 7];    // Major triad (default)
+  }
+
+  return intervals.map((semitones) => {
+    const newIdx = (rootIdx + semitones) % 12;
+    const newOctave = octave + Math.floor((rootIdx + semitones) / 12);
+    return `${noteNames[newIdx]}${newOctave}`;
+  });
+}
+
+/** Toggle chord mode on/off. Returns new state. */
+function toggleChordMode() {
+  isChordModeOn = !isChordModeOn;
+  if (!isChordModeOn) {
+    // Release any held chord notes
+    if (synth && synth.triggerRelease) {
+      try { synth.triggerRelease(); } catch(e) {}
+    }
+    previousChordNotes = [];
+    previousNote = null;
+  }
+  return isChordModeOn;
+}
+
+// ─── Ambient Drone Mode ──────────────────────────────────────────────────
+
+/** Start the ambient drone. Creates a pad synth that sustains and evolves slowly. */
+function startDrone() {
+  if (droneSynth) stopDrone();
+
+  const droneRev = new Tone.Reverb({ decay: 8, wet: 0.7 });
+  const droneChor = new Tone.Chorus({ frequency: 0.2, delayTime: 3.5, depth: 0.6 });
+  const droneFilter = new Tone.Filter(300, "lowpass");
+  const droneGain = new Tone.Volume(-18);
+
+  droneSynth = new Tone.PolySynth(Tone.FMSynth, {
+    harmonicity: 0.5,
+    modulationIndex: 1,
+    envelope: { attack: 3, decay: 4, sustain: 0.5, release: 6 },
+    oscillator: { type: "sine" },
+  });
+
+  droneSynth.chain(droneFilter, droneChor, droneRev, droneGain, Tone.Destination);
+  droneEffects = [droneFilter, droneChor, droneRev, droneGain];
+
+  // Play a gentle pad chord
+  droneNote = "C2";
+  const droneChord = ["C2", "G2", "E3"];
+  droneSynth.triggerAttack(droneChord);
+
+  // Slowly evolve filter frequency
+  droneSynth._droneFilterInterval = setInterval(() => {
+    if (!droneFilter || !isDroneOn) return;
+    const f = 200 + Math.sin(Date.now() / 8000) * 150;
+    droneFilter.frequency.rampTo(f, 4);
+  }, 4000);
+}
+
+/** Stop and dispose the ambient drone. */
+function stopDrone() {
+  if (droneSynth) {
+    if (droneSynth._droneFilterInterval) {
+      clearInterval(droneSynth._droneFilterInterval);
+    }
+    try { droneSynth.releaseAll(); } catch (e) {}
+    setTimeout(() => {
+      try { droneSynth.dispose(); } catch (e) {}
+      droneEffects.forEach((fx) => { try { fx.dispose(); } catch(e) {} });
+      droneEffects = [];
+    }, 200);
+    droneSynth = null;
+  }
+}
+
+/** Toggle drone. Returns new state. */
+function toggleDrone() {
+  isDroneOn = !isDroneOn;
+  if (isDroneOn) {
+    if (isAudioReady) startDrone();
+  } else {
+    stopDrone();
+  }
+  return isDroneOn;
+}
+
+// ─── Theme Switcher ──────────────────────────────────────────────────────
+
+const THEME_NAMES = { dark: "Dark", neon: "Neon", warm: "Warm" };
+
+function applyTheme(theme) {
+  document.body.setAttribute("data-theme", theme);
+  document.querySelectorAll(".theme-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.theme === theme);
+  });
+  localStorage.setItem("gms_theme", theme);
+}
+
+function initTheme() {
+  const saved = localStorage.getItem("gms_theme") || "dark";
+  applyTheme(saved);
+  document.querySelectorAll(".theme-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      applyTheme(btn.dataset.theme);
+      showToast(`${THEME_NAMES[btn.dataset.theme]} theme applied`);
+    });
+  });
+}
+
+// ─── Personal Greeting ───────────────────────────────────────────────────
+
+function updateGreeting() {
+  const greetingEl = document.getElementById("greeting-text");
+  if (!greetingEl) return;
+  const hour = new Date().getHours();
+  let timeGreeting;
+  if (hour < 6)       timeGreeting = "Good night";
+  else if (hour < 12) timeGreeting = "Good morning";
+  else if (hour < 17) timeGreeting = "Good afternoon";
+  else if (hour < 21) timeGreeting = "Good evening";
+  else                timeGreeting = "Good night";
+  greetingEl.textContent = `${timeGreeting}, Jayesh`;
+}
+
+// ─── Sidebar Nav Update ──────────────────────────────────────────────────
+
+const STAGE_DESCRIPTIONS = {
+  theremin: "Move hand up/down for pitch · left/right for filter · openness for reverb",
+  drumkit:  "Curl each finger to trigger kick, snare, hi-hat, clap · fist for drum fill",
+  kaoss:    "X controls modulation · Y controls volume · open/close for expression",
+  fxpad:    "X and Y axes control chosen effect parameters on a sustained drone",
+};
+
+/** Update sidebar nav highlighting and stage header text. */
+function updateInstrumentUI(instrument) {
+  // Update nav buttons
+  document.querySelectorAll(".instrument-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.instrument === instrument);
+  });
+  // Update stage header
+  if (stageInstrumentName) {
+    stageInstrumentName.textContent = INSTRUMENT_NAMES[instrument] || instrument;
+  }
+  if (stageInstrumentDesc) {
+    stageInstrumentDesc.textContent = STAGE_DESCRIPTIONS[instrument] || "";
+  }
+  // Show/hide right-panel sections
+  const isDrum = instrument === "drumkit";
+  const isFx   = instrument === "fxpad";
+  if (scaleRow)        scaleRow.style.display      = (isDrum || isFx) ? "none" : "flex";
+  if (chordRow)        chordRow.style.display      = (isDrum || isFx) ? "none" : "flex";
+  if (drumMappingRow)  drumMappingRow.style.display = isDrum ? "flex" : "none";
+  if (fxAxisControls)  fxAxisControls.style.display = isFx  ? "block" : "none";
+  if (arpSection)      arpSection.style.display     = isDrum ? "none" : "block";
+  if (aiRow)           aiRow.style.display          = isDrum ? "none" : "flex";
+  // Show gesture guides
+  const gTheremin = document.getElementById("gesture-guide-theremin");
+  const gDrum     = document.getElementById("gesture-guide-drum");
+  const gFxpad    = document.getElementById("gesture-guide-fxpad");
+  if (gTheremin) gTheremin.style.display = (!isDrum && !isFx) ? "block" : "none";
+  if (gDrum)     gDrum.style.display     = isDrum ? "block" : "none";
+  if (gFxpad)    gFxpad.style.display    = isFx   ? "block" : "none";
 }
 
 // Track previous MIDI/AI notes
@@ -1712,8 +2145,8 @@ async function init() {
     if (arpToggleBtn) {
       arpToggleBtn.addEventListener("click", () => {
         const on = toggleArpeggiator();
-        arpToggleBtn.classList.toggle("arp-active", on);
-        arpToggleBtn.textContent = on ? "🔊 Arp" : "🎹 Arp";
+        arpToggleBtn.classList.toggle("active", on);
+        arpToggleBtn.textContent = on ? "On" : "Off";
       });
     }
     if (arpPatternSelect) {
@@ -1766,6 +2199,64 @@ async function init() {
 
     // Initialize Transport BPM from slider
     Tone.Transport.bpm.value = parseInt(bpmSlider.value) || 120;
+
+    // ─── Init new features ──────────────────────────────────────────────
+
+    // Personal greeting
+    updateGreeting();
+
+    // Theme switcher
+    initTheme();
+
+    // Init instrument UI for default instrument
+    updateInstrumentUI(currentInstrument);
+
+    // Sidebar instrument nav buttons
+    document.querySelectorAll(".instrument-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const inst = btn.dataset.instrument;
+        if (!inst) return;
+        // Fire change via the hidden select
+        instrumentSelect.value = inst;
+        instrumentSelect.dispatchEvent(new Event("change"));
+      });
+    });
+
+    // Add Layer button
+    if (addLayerBtn) {
+      addLayerBtn.addEventListener("click", () => {
+        if (instrumentLayers.length >= MAX_LAYERS) {
+          showToast(`Max ${MAX_LAYERS} layers reached`, "error");
+          return;
+        }
+        // Default to adding a kaoss or theremin layer depending on current instrument
+        const layerType = currentInstrument === "drumkit" ? "theremin" : currentInstrument;
+        const layer = createLayer(layerType);
+        if (layer) {
+          showToast(`Added ${INSTRUMENT_NAMES[layerType]} layer (${instrumentLayers.length}/${MAX_LAYERS})`);
+        }
+      });
+    }
+
+    // Chord mode toggle
+    if (chordModeBtn) {
+      chordModeBtn.addEventListener("click", () => {
+        const on = toggleChordMode();
+        chordModeBtn.classList.toggle("active", on);
+        chordModeBtn.textContent = on ? "On" : "Off";
+        showToast(on ? "Chord Mode ON — hand gestures control voicing" : "Chord Mode OFF");
+      });
+    }
+
+    // Drone toggle
+    if (droneBtn) {
+      droneBtn.addEventListener("click", () => {
+        const on = toggleDrone();
+        droneBtn.classList.toggle("active", on);
+        droneBtn.textContent = on ? "On" : "Off";
+        showToast(on ? "Ambient Drone ON — background pad is playing" : "Ambient Drone OFF");
+      });
+    }
 
     // Wire preset controls
     refreshPresetList();
@@ -2029,8 +2520,8 @@ async function init() {
     if (aiMelodyToggle) {
       aiMelodyToggle.addEventListener("click", () => {
         toggleAiMelody();
-        aiMelodyToggle.classList.toggle("ai-melody-active", isAiMelodyOn);
-        aiMelodyToggle.textContent = isAiMelodyOn ? "🧠 AI On" : "🤖 AI";
+        aiMelodyToggle.classList.toggle("active", isAiMelodyOn);
+        aiMelodyToggle.textContent = isAiMelodyOn ? "On" : "Off";
       });
     }
 
@@ -2183,8 +2674,10 @@ async function init() {
       await Tone.start();
       isAudioReady = true;
       Tone.Transport.start();
+      // Start drone if it was toggled before audio was ready
+      if (isDroneOn && !droneSynth) startDrone();
       hideStartupOverlay();
-      statusEl.textContent = "🎵 Move your hand to make music!";
+      statusEl.textContent = "Move your hand to make music!";
     } catch (audioErr) {
       console.warn("Auto-start audio failed:", audioErr);
       // Fallback: start audio when the first hand is detected or on click
@@ -2261,8 +2754,8 @@ bpmSlider.addEventListener("input", () => {
 metronomeBtn.addEventListener("click", () => {
   isMetronomeOn = !isMetronomeOn;
   setupMetronome(isMetronomeOn);
-  metronomeBtn.classList.toggle("metronome-active", isMetronomeOn);
-  metronomeBtn.textContent = isMetronomeOn ? "🔊" : "🎵";
+  metronomeBtn.classList.toggle("active", isMetronomeOn);
+  metronomeBtn.textContent = isMetronomeOn ? "On" : "Off";
 });
 
 // Quantization selector
@@ -2308,8 +2801,8 @@ instrumentSelect.addEventListener("change", (e) => {
   if (isDrumkit && isArpeggiatorOn) {
     toggleArpeggiator();
     if (arpToggleBtn) {
-      arpToggleBtn.classList.remove("arp-active");
-      arpToggleBtn.textContent = "🎹 Arp";
+      arpToggleBtn.classList.remove("active");
+      arpToggleBtn.textContent = "Off";
     }
   }
 
@@ -2318,25 +2811,8 @@ instrumentSelect.addEventListener("change", (e) => {
     aiMelodyToggle.click();
   }
 
-  // Toggle gesture guides based on mode
-  const guideTheremin = document.getElementById("gesture-guide-theremin");
-  const guideDrum = document.getElementById("gesture-guide-drum");
-  const guideFxpad = document.getElementById("gesture-guide-fxpad");
-  if (guideTheremin && guideDrum) {
-    if (currentInstrument === "drumkit") {
-      guideTheremin.style.display = "none";
-      guideDrum.style.display = "block";
-      if (guideFxpad) guideFxpad.style.display = "none";
-    } else if (currentInstrument === "fxpad") {
-      guideTheremin.style.display = "none";
-      guideDrum.style.display = "none";
-      if (guideFxpad) guideFxpad.style.display = "block";
-    } else {
-      guideTheremin.style.display = "block";
-      guideDrum.style.display = "none";
-      if (guideFxpad) guideFxpad.style.display = "none";
-    }
-  }
+  // Update sidebar nav + stage header
+  updateInstrumentUI(currentInstrument);
 });
 
 // Scale selector event

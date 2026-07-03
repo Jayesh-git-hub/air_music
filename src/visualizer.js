@@ -321,17 +321,17 @@ export function createAudioVisualizer(canvasEl) {
       const neighbor = freqData[nextIdx] / 255;
       const value = raw * 0.7 + neighbor * 0.3;
 
-      // Apply minimum height and scale
-      const targetHeight = minBarHeight + value * (maxBarHeight - minBarHeight);
+      // Apply minimum height and scale — clamp so bars never exceed canvas
+      const targetHeight = Math.min(maxBarHeight, minBarHeight + value * (maxBarHeight - minBarHeight));
 
       // Smooth toward target (fast attack, slow decay)
       const current = eqBarHeights[i];
       if (targetHeight > current) {
         // Attack: follow up quickly
-        eqBarHeights[i] = current + (targetHeight - current) * 0.4;
+        eqBarHeights[i] = Math.min(maxBarHeight, current + (targetHeight - current) * 0.4);
       } else {
         // Decay: fall smoothly
-        eqBarHeights[i] = current + (targetHeight - current) * EQ_SMOOTHING;
+        eqBarHeights[i] = Math.max(minBarHeight, current + (targetHeight - current) * EQ_SMOOTHING);
       }
     }
 
@@ -347,9 +347,9 @@ export function createAudioVisualizer(canvasEl) {
 
     // ─── 3. Draw equalizer bars ────────────────────────────────────
     for (let i = 0; i < barCount; i++) {
-      const barHeight = Math.max(minBarHeight, eqBarHeights[i]);
+      const barHeight = Math.max(minBarHeight, Math.min(maxBarHeight, eqBarHeights[i]));
       const x = i * (barWidth + gap);
-      const y = h - barHeight;
+      const y = Math.max(0, h - barHeight);
 
       // Color: green at bottom → cyan at top, with brightness boost for taller bars
       const ratio = barHeight / maxBarHeight;
@@ -385,7 +385,8 @@ export function createAudioVisualizer(canvasEl) {
     let wx = 0;
     for (let i = 0; i < timeData.length; i += 4) {
       const v = timeData[i] / 128.0;
-      const wy = (v * h) / 2;
+      // Center waveform at h/2: v=1 → center, v<1 → above, v>1 → below
+      const wy = Math.max(0, Math.min(h, ((v - 1) * h) / 2 + h / 2));
       if (i === 0) ctx.moveTo(wx, wy);
       else ctx.lineTo(wx, wy);
       wx += sliceWidth * 4;
