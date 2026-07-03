@@ -41,62 +41,80 @@ export function createLoopStation() {
     }
   }
 
+  let recordingSource = Tone.Destination; // Default to master out
+
+  /**
+   * Set the specific audio node to record from (e.g. current synth mix)
+   * to avoid recording the metronome or other active layers.
+   */
+  function setRecordingSource(node) {
+    recordingSource = node;
+  }
+
   // ─── Lifecycle ────────────────────────────────────────────────────
 
   /**
-   * Begin recording audio from the master output.
-   * Existing layers continue playing uninterrupted.
+   * Begin recording audio from the active source on the NEXT downbeat.
    */
   async function startRecording() {
     if (isRecording) return;
-    try {
-      recorder = new Tone.Recorder();
-      Tone.Destination.connect(recorder);
-      await recorder.start();
-      isRecording = true;
-      emitState();
-    } catch (err) {
-      console.error("LoopStation: recording start failed", err);
-    }
+    
+    // We schedule the recording start exactly on the next bar for perfect loops
+    Tone.Transport.scheduleOnce(async (time) => {
+      try {
+        recorder = new Tone.Recorder();
+        recordingSource.connect(recorder);
+        await recorder.start();
+        isRecording = true;
+        
+        // Use Tone.Draw to safely update UI from the audio thread
+        Tone.Draw.schedule(() => emitState(), time);
+      } catch (err) {
+        console.error("LoopStation: recording start failed", err);
+      }
+    }, "@1m"); // Next measure
   }
 
   /**
-   * Stop recording and create a new looping layer from the captured audio.
-   * @returns {Promise<Object|null>} The new layer, or null on failure
+   * Stop recording exactly on the NEXT downbeat to ensure a perfect loop.
    */
   async function stopRecording() {
     if (!isRecording || !recorder) return null;
-    try {
-      const buffer = await recorder.stop();
-      Tone.Destination.disconnect(recorder);
-      recorder.dispose();
-      recorder = null;
-      isRecording = false;
+    
+    return new Promise((resolve) => {
+      Tone.Transport.scheduleOnce(async (time) => {
+        try {
+          const buffer = await recorder.stop();
+          recordingSource.disconnect(recorder);
+          recorder.dispose();
+          recorder = null;
+          isRecording = false;
 
-      // Create a looping player from the recorded buffer
-      const player = new Tone.Player(buffer).toDestination();
-      player.loop = true;
+          // Create a looping player from the recorded buffer
+          const player = new Tone.Player(buffer).toDestination();
+          player.loop = true;
 
-      const layer = { id: nextId++, player, buffer };
-      layers.push(layer);
+          const layer = { id: nextId++, player, buffer };
+          layers.push(layer);
 
-      // Start playback immediately
-      player.start();
+          // Start playback perfectly in sync with transport
+          player.sync().start(time);
 
-      emitState();
-      return layer;
-    } catch (err) {
-      console.error("LoopStation: recording stop failed", err);
-      // Clean up recorder even on error
-      if (recorder) {
-        Tone.Destination.disconnect(recorder);
-        recorder.dispose();
-        recorder = null;
-      }
-      isRecording = false;
-      emitState();
-      return null;
-    }
+          Tone.Draw.schedule(() => emitState(), time);
+          resolve(layer);
+        } catch (err) {
+          console.error("LoopStation: recording stop failed", err);
+          if (recorder) {
+            recordingSource.disconnect(recorder);
+            recorder.dispose();
+            recorder = null;
+          }
+          isRecording = false;
+          Tone.Draw.schedule(() => emitState(), time);
+          resolve(null);
+        }
+      }, "@1m"); // Next measure
+    });
   }
 
   /**
@@ -208,6 +226,7 @@ export function createLoopStation() {
   }
 
   return {
+    setRecordingSource,
     startRecording,
     stopRecording,
     removeLastLayer,

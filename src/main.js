@@ -95,6 +95,14 @@ const arpSection = document.getElementById("arp-section");
 const aiSection = document.getElementById("ai-section");
 const aiRow = document.getElementById("ai-row");
 
+// ─── Looper DOM Refs ────────────────────────────────────────────────────
+const btnLoopRecord = document.getElementById("btn-loop-record");
+const btnLoopStop = document.getElementById("btn-loop-stop");
+const btnLoopClear = document.getElementById("btn-loop-clear");
+const btnLoopPlay = document.getElementById("btn-loop-play");
+const loopLayerCountDisplay = document.getElementById("loop-layer-count");
+const loopRecIndicatorDisplay = document.getElementById("loop-rec-indicator");
+
 // ─── State ────────────────────────────────────────────────────────────────
 
 let handTracker = null;
@@ -109,6 +117,7 @@ let lastGain = -1;
 let lastFilter = -1;
 let lastWet = -1;
 let currentEffects = [];
+let instrumentMaster = null; // Master bus for the current active instrument
 const CHANGE_THRESHOLD = 0.02; // Only schedule audio param changes > 2%
 
 // MIDI event recorder
@@ -569,6 +578,10 @@ function createInstrument(type) {
   disposeSynth();
   currentEffects.forEach((fx) => fx.dispose());
   currentEffects = [];
+  
+  if (!instrumentMaster) {
+    instrumentMaster = new Tone.Gain(1).toDestination();
+  }
 
   switch (type) {
     // THEREMIN — Lush cello/theremin hybrid
@@ -607,7 +620,7 @@ function createInstrument(type) {
       const thMix = new Tone.Gain(0.75);
       thVoice1.chain(thVibrato, thMix);
       thVoice2.connect(thMix);
-      thMix.chain(thFilter, thChorus, thRevPlate, thDelay, Tone.Destination);
+      thMix.chain(thFilter, thChorus, thRevPlate, thDelay, instrumentMaster);
 
       // Slow detune drift LFO for natural feel
       const thDetuneLFO = new Tone.LFO({ frequency: 0.15, min: -4, max: 4 }).start();
@@ -633,7 +646,7 @@ function createInstrument(type) {
       const drumEQ     = new Tone.EQ3({ low: 2, mid: -1, high: 1, lowFrequency: 250, highFrequency: 4000 });
       const drumRev    = new Tone.Reverb({ decay: 1.2, wet: 0.12, preDelay: 0.005 });
       const drumGain   = new Tone.Gain(0.9);
-      drumComp.chain(drumHiPass, drumEQ, drumLoPass, drumRev, drumGain, Tone.Destination);
+      drumComp.chain(drumHiPass, drumEQ, drumLoPass, drumRev, drumGain, instrumentMaster);
 
       const kickSub   = new Tone.MembraneSynth({ pitchDecay: 0.055, octaves: 9,  envelope: { attack: 0.001, decay: 0.55, sustain: 0.0, release: 0.7  } });
       const kickBody  = new Tone.MembraneSynth({ pitchDecay: 0.025, octaves: 5,  envelope: { attack: 0.001, decay: 0.22, sustain: 0.0, release: 0.25 } });
@@ -724,7 +737,7 @@ function createInstrument(type) {
         volume: -10,
       });
 
-      droneVoice.chain(fxEQ, fxDistortion, fxChorus, fxFilter, fxTremolo, fxReverb, fxDelay, Tone.Destination);
+      droneVoice.chain(fxEQ, fxDistortion, fxChorus, fxFilter, fxTremolo, fxReverb, fxDelay, instrumentMaster);
       // 5-note orchestral chord: root, octave, fifth, third, seventh
       droneVoice.triggerAttack(["C2", "C3", "G3", "E4", "B4"]);
 
@@ -768,7 +781,7 @@ function createInstrument(type) {
       });
       const kV1 = mkKaoss(0, -8); const kV2 = mkKaoss(7, -13); const kV3 = mkKaoss(-7, -13);
       kV1.connect(kaosMix); kV2.connect(kaosMix); kV3.connect(kaosMix);
-      kaosMix.chain(kaossEQ, kaossFilter, kaossPhaser, kaossChorus, kaossReverb, kaossDelay, Tone.Destination);
+      kaosMix.chain(kaossEQ, kaossFilter, kaossPhaser, kaossChorus, kaossReverb, kaossDelay, instrumentMaster);
 
       synth = {
         _v1: kV1, _v2: kV2, _v3: kV3,
@@ -795,8 +808,13 @@ function createInstrument(type) {
     }
 
     default:
-      synth = new Tone.Synth().toDestination();
+      synth = new Tone.Synth().connect(instrumentMaster);
       currentEffects = [];
+  }
+  
+  // Wire the new instrument to the Loop Station for isolated recording
+  if (loopStation) {
+    loopStation.setRecordingSource(instrumentMaster);
   }
 }
 
@@ -2180,22 +2198,35 @@ async function init() {
     loopStation = createLoopStation();
     loopStation.setOnStateChange((state) => {
       // Update loop station DOM
-      if (loopLayerCount) {
-        loopLayerCount.textContent = `${state.loopCount} layer${state.loopCount !== 1 ? "s" : ""}`;
+      if (loopLayerCountDisplay) {
+        loopLayerCountDisplay.textContent = `${state.loopCount} active loop${state.loopCount !== 1 ? "s" : ""}`;
       }
-      if (loopRecIndicator) {
-        loopRecIndicator.style.display = state.recording ? "flex" : "none";
+      if (loopRecIndicatorDisplay) {
+        loopRecIndicatorDisplay.style.display = state.recording ? "block" : "none";
       }
-      if (loopLayersContainer) {
-        loopLayersContainer.innerHTML = "";
-        for (let i = 0; i < state.loopCount; i++) {
-          const chip = document.createElement("span");
-          chip.className = "loop-layer-chip";
-          chip.textContent = `🎵 Layer ${i + 1}`;
-          loopLayersContainer.appendChild(chip);
-        }
+      
+      // Update buttons
+      if (btnLoopRecord) {
+        btnLoopRecord.disabled = state.recording;
+        btnLoopRecord.style.opacity = state.recording ? "0.5" : "1";
+      }
+      if (btnLoopStop) {
+        btnLoopStop.disabled = !state.recording;
+      }
+      if (btnLoopClear) {
+        btnLoopClear.disabled = state.loopCount === 0;
+      }
+      if (btnLoopPlay) {
+        btnLoopPlay.disabled = state.loopCount === 0;
+        btnLoopPlay.innerHTML = state.state === "playing" ? "⏸ Pause" : "▶️ Play";
       }
     });
+    
+    // Wire Looper buttons
+    if (btnLoopRecord) btnLoopRecord.addEventListener("click", () => loopStation && loopStation.startRecording());
+    if (btnLoopStop) btnLoopStop.addEventListener("click", () => loopStation && loopStation.stopRecording());
+    if (btnLoopClear) btnLoopClear.addEventListener("click", () => loopStation && loopStation.removeLastLayer());
+    if (btnLoopPlay) btnLoopPlay.addEventListener("click", () => loopStation && loopStation.toggleAllPlayback());
 
     // Initialize Transport BPM from slider
     Tone.Transport.bpm.value = parseInt(bpmSlider.value) || 120;
